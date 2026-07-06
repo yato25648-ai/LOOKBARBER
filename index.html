@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lookbarber — Agenda tu turno</title>
+<meta name="description" content="Lookbarber. Cortes de barbero urbano. Agenda tu turno por WhatsApp con Diego, Sebastián o Felipe.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0A0A0C;
+    --surface:#141417;
+    --surface-2:#1C1C20;
+    --line:#2A2A2F;
+    --red:#C8202F;
+    --blue:#3E6BC4;
+    --text:#F4F4F0;
+    --muted:#8C8C94;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .display{font-family:'Anton',sans-serif;font-weight:400;letter-spacing:.01em;text-transform:uppercase;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;text-decoration:none;}
+  img{display:block;max-width:100%;}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 24px;}
+
+  /* barber-pole stripe divider — signature structural device */
+  .pole-divider{
+    height:10px;
+    background:repeating-linear-gradient(
+      -45deg,
+      var(--blue) 0px, var(--blue) 14px,
+      var(--text) 14px, var(--text) 28px,
+      var(--red) 28px, var(--red) 42px
+    );
+    background-size: 200% 100%;
+    animation: pole-spin 6s linear infinite;
+  }
+  @keyframes pole-spin{ from{background-position:0 0;} to{background-position:200px 0;} }
+  @media (prefers-reduced-motion: reduce){ .pole-divider{animation:none;} }
+
+  /* NAV */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(10,10,12,.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;max-width:1100px;margin:0 auto;}
+  .logo{font-family:'Anton',sans-serif;font-size:22px;letter-spacing:.03em;text-transform:uppercase;}
+  .logo span{color:var(--red);}
+  .brand-logo{display:block;}
+  .nav-logo{height:42px;width:auto;}
+  .hero-logo{height:150px;width:auto;margin:0 auto 28px;filter:drop-shadow(0 0 30px rgba(200,32,47,.25));}
+  .footer-logo{height:130px;width:auto;margin:0 auto 14px;cursor:pointer;transition:transform .15s;}
+  .footer-logo:hover{transform:scale(1.03);}
+  @media (max-width:600px){ .hero-logo{height:110px;} }
+  .nav-links{display:flex;gap:28px;align-items:center;}
+  .nav-links a{font-size:14px;color:var(--muted);transition:color .2s;}
+  .nav-links a:hover{color:var(--red);}
+  .nav-cta{
+    background:var(--red);color:#0A0A0C;font-weight:700;font-size:13px;
+    padding:10px 18px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;
+  }
+  .nav-mobile-hide{display:flex;}
+  @media (max-width:760px){ .nav-links a:not(.nav-cta){display:none;} }
+
+  /* HERO */
+  .hero{
+    position:relative;
+    padding:110px 24px 90px;
+    text-align:center;
+    overflow:hidden;
+    min-height:640px;
+    display:flex;flex-direction:column;justify-content:center;align-items:center;
+  }
+  .hero-video-bg{
+    position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center 38%;
+    z-index:-2;filter:brightness(.62) saturate(1.05);
+  }
+  .hero-overlay{
+    position:absolute;inset:0;z-index:-1;
+    background:
+      linear-gradient(180deg, rgba(10,10,12,.55) 0%, rgba(10,10,12,.35) 35%, rgba(10,10,12,.75) 100%),
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(200,32,47,.18), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 80% 90%, rgba(62,107,196,.15), transparent 60%);
+  }
+  @media (max-width:700px){ .hero{min-height:88vh;padding:90px 20px 70px;} }
+  .eyebrow-row{
+    display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:22px;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--red);
+    border:1px solid var(--line);padding:6px 14px;border-radius:999px;
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .dot-live{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red);animation:blink 1.6s ease-in-out infinite;}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:.25;}}
+
+  .hero h1{
+    font-size:clamp(48px,11vw,108px);
+    line-height:.92;
+    text-shadow:0 0 30px rgba(200,32,47,.25);
+  }
+  .hero h1 .flicker{ animation:flicker 5s infinite; color:var(--red); }
+  @keyframes flicker{
+    0%,19%,21%,23%,80%,100%{opacity:1;}
+    20%,22%,79%{opacity:.4;}
+  }
+  @media (prefers-reduced-motion: reduce){ .hero h1 .flicker{animation:none;} }
+
+  .hero p.sub{
+    max-width:480px;margin:22px auto 0;color:var(--muted);font-size:16px;line-height:1.6;
+  }
+  .hero-actions{display:flex;gap:14px;justify-content:center;margin-top:36px;flex-wrap:wrap;}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:15px 26px;border-radius:10px;font-weight:700;font-size:14px;
+    text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent;cursor:pointer;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--red);color:#0A0A0C;}
+  .btn-primary:hover{box-shadow:0 0 24px rgba(200,32,47,.4);}
+  .btn-ghost{border-color:var(--line);color:var(--text);}
+  .btn-ghost:hover{border-color:var(--muted);}
+
+  .hours-strip{
+    display:flex;justify-content:center;gap:32px;margin-top:46px;flex-wrap:wrap;
+    font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted);
+  }
+  .hours-strip b{color:var(--text);}
+
+  /* SECTIONS */
+  section{padding:80px 0;}
+  .section-head{margin-bottom:44px;}
+  .section-tag{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:block;}
+  .section-title{font-size:clamp(30px,5vw,46px);}
+
+  /* BARBEROS */
+  .barber-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media (max-width:760px){.barber-grid{grid-template-columns:1fr;}}
+  .barber-card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:30px 24px;text-align:center;position:relative;overflow:hidden;
+    transition:border-color .2s, transform .2s;
+  }
+  .barber-card:hover{border-color:var(--red);transform:translateY(-4px);}
+  .barber-avatar{
+    width:84px;height:84px;border-radius:50%;margin:0 auto 18px;
+    background:var(--surface-2);border:2px solid var(--red);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Anton',sans-serif;font-size:30px;color:var(--red);
+  }
+  .barber-card h3{font-size:22px;margin-bottom:6px;}
+  .barber-card .role{color:var(--muted);font-size:13px;margin-bottom:20px;font-family:'JetBrains Mono',monospace;}
+  .barber-select-btn{
+    width:100%;padding:13px;border-radius:8px;border:1px solid var(--line);
+    background:transparent;color:var(--text);font-weight:600;font-size:13px;
+    text-transform:uppercase;letter-spacing:.03em;cursor:pointer;transition:.2s;
+  }
+  .barber-select-btn:hover, .barber-select-btn.active{background:var(--red);color:#0A0A0C;border-color:var(--red);}
+
+  /* CATALOGO */
+  .cuts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  @media (max-width:900px){.cuts-grid{grid-template-columns:repeat(2,1fr);}}
+  .cut-card{
+    position:relative;border-radius:var(--radius);overflow:hidden;aspect-ratio:3/4;
+    background:var(--surface-2);cursor:pointer;border:1px solid var(--line);
+  }
+  .cut-card img{width:100%;height:100%;object-fit:cover;transition:transform .4s ease;}
+  .cut-card:hover img{transform:scale(1.08);}
+  .cut-card-contain{background:linear-gradient(160deg, #14151a, #1c1e26);}
+  .cut-card-contain img{object-fit:contain;padding:22px;transition:transform .3s ease;}
+  .cut-card-contain:hover img{transform:scale(1.05);}
+  .cut-card-icon{
+    background:linear-gradient(160deg, #14151a, #1c1e26);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  }
+  .cut-icon-glyph{font-size:52px;filter:drop-shadow(0 0 14px rgba(200,32,47,.35));}
+  .cut-label-icon{
+    position:static;background:none;padding:0;text-align:center;
+    font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;
+  }
+  .cut-label{
+    position:absolute;left:0;right:0;bottom:0;padding:14px;
+    background:linear-gradient(0deg, rgba(0,0,0,.85), transparent);
+    font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;
+    display:flex;flex-direction:column;gap:3px;
+  }
+  .cut-price{
+    font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;
+    color:var(--red);text-transform:none;letter-spacing:0;
+  }
+  .cut-select-tag{
+    position:absolute;top:10px;right:10px;background:rgba(10,10,12,.7);
+    border:1px solid var(--line);color:var(--red);font-family:'JetBrains Mono',monospace;
+    font-size:10px;padding:4px 8px;border-radius:999px;opacity:0;transition:.2s;
+  }
+  .cut-card:hover .cut-select-tag{opacity:1;}
+  .cut-card.selected{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
+  .cut-card.selected .cut-select-tag{opacity:1;background:var(--red);color:#0A0A0C;}
+
+  /* BOOKING TICKET */
+  .booking-section{background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .ticket{
+    background:var(--bg);border:1px dashed var(--line);border-radius:var(--radius);
+    padding:0;max-width:520px;margin:0 auto;overflow:hidden;
+  }
+  .ticket-head{
+    background:var(--red);color:#0A0A0C;padding:16px 24px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .ticket-head span{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;}
+  .ticket-body{padding:24px;}
+  .field{margin-bottom:18px;}
+  .field label{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+  .field input, .field select{
+    width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;
+    padding:13px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;
+  }
+  .field input:focus, .field select:focus{outline:none;border-color:var(--red);}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .barber-pill-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .barber-pill{
+    flex:1;min-width:90px;padding:11px;text-align:center;border-radius:8px;border:1px solid var(--line);
+    font-size:13px;font-weight:600;cursor:pointer;transition:.2s;
+  }
+  .barber-pill.active{background:var(--red);color:#0A0A0C;border-color:var(--red);}
+  .slots-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+  }
+  @media (max-width:420px){ .slots-grid{grid-template-columns:repeat(3,1fr);} }
+  .slots-hint{
+    grid-column:1/-1;color:var(--muted);font-size:12.5px;padding:14px 4px;text-align:center;
+    border:1px dashed var(--line);border-radius:8px;
+  }
+  .slot-btn{
+    padding:10px 4px;border-radius:8px;border:1px solid var(--line);background:transparent;
+    color:var(--text);font-size:13px;font-family:'JetBrains Mono',monospace;font-weight:600;
+    cursor:pointer;transition:.15s;text-align:center;
+  }
+  .slot-btn:hover:not(:disabled){border-color:var(--red);}
+  .slot-btn.active{background:var(--red);color:#0A0A0C;border-color:var(--red);}
+  .slot-btn:disabled{
+    opacity:.35;cursor:not-allowed;text-decoration:line-through;background:var(--surface-2);
+  }
+  .slots-loading{grid-column:1/-1;color:var(--muted);font-size:12.5px;text-align:center;padding:14px;}
+  .ticket-perforation{
+    height:0;border-top:2px dashed var(--line);position:relative;margin:0 24px;
+  }
+  .ticket-summary{padding:20px 24px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);line-height:1.9;}
+  .ticket-summary b{color:var(--text);}
+  .ticket-footer{padding:20px 24px 26px;}
+  .submit-btn{
+    width:100%;padding:16px;border:none;border-radius:10px;background:var(--blue);
+    color:#fff;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:10px;transition:.2s;
+  }
+  .submit-btn:hover{filter:brightness(1.1);}
+  .submit-btn:disabled{opacity:.5;cursor:not-allowed;}
+  .form-msg{font-size:12px;text-align:center;margin-top:12px;color:var(--muted);}
+  .form-msg.error{color:var(--blue);}
+  .form-msg.ok{color:var(--red);}
+
+  footer{padding:50px 0 30px;text-align:center;color:var(--muted);font-size:13px;}
+  footer .logo{justify-content:center;display:flex;margin-bottom:14px;}
+  footer a{color:var(--red);}
+  .admin-link{display:block;margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--line);}
+  .admin-link:hover{color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <nav>
+    <img class="brand-logo nav-logo" src="logo.webp" alt="Look Barbershop Store">
+    <div class="nav-links">
+      <a href="#cortes">Cortes</a>
+      <a href="#barberos">Barberos</a>
+      <a href="#agenda" class="nav-cta">Agendar</a>
+    </div>
+  </nav>
+</header>
+
+<section class="hero">
+  <video class="hero-video-bg" autoplay muted loop playsinline preload="auto" poster="poster.jpg" src="video.mp4"></video>
+  <div class="hero-overlay"></div>
+  <img class="brand-logo hero-logo" src="logo.webp" alt="Look Barbershop Store">
+  <div class="eyebrow-row">
+    <span class="eyebrow"><span class="dot-live"></span>Abierto ahora · 11AM–9PM</span>
+  </div>
+  <h1 class="display">Tu corte.<br><span class="flicker">Tu hora.</span></h1>
+  <p class="sub">Barbería urbana. Tres barberos, un solo lugar. Elige con quién te cortas y agenda directo por WhatsApp — sin filas, sin vueltas.</p>
+  <div class="hero-actions">
+    <a href="#agenda" class="btn btn-primary">Agendar turno</a>
+    <a href="#cortes" class="btn btn-ghost">Ver cortes</a>
+  </div>
+  <div class="hours-strip">
+    <span>🕚 <b>Lun – Dom</b> · 11:00 AM – 9:00 PM</span>
+    <span>✂️ <b>3</b> barberos disponibles</span>
+  </div>
+</section>
+
+<div class="pole-divider"></div>
+
+<section id="cortes">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-tag">Catálogo</span>
+      <h2 class="section-title display">Cortes que manejamos</h2>
+    </div>
+    <div class="cuts-grid" id="cutsGrid"></div>
+  </div>
+</section>
+
+<section id="barberos" style="background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-tag">El equipo</span>
+      <h2 class="section-title display">Elige tu barbero</h2>
+    </div>
+    <div class="barber-grid" id="barberGrid"></div>
+  </div>
+</section>
+
+<section id="agenda" class="booking-section">
+  <div class="wrap">
+    <div class="section-head" style="text-align:center;">
+      <span class="section-tag">Reserva</span>
+      <h2 class="section-title display">Agenda tu turno</h2>
+      <p style="color:var(--muted);margin-top:10px;">Llena el ticket. Lo confirmas directo por WhatsApp con tu barbero.</p>
+    </div>
+
+    <form class="ticket" id="bookingForm">
+      <div class="ticket-head">
+        <span>LOOKBARBER · TICKET</span>
+        <span id="ticketDate">--/--/----</span>
+      </div>
+      <div class="ticket-body">
+
+        <div class="field">
+          <label>Barbero</label>
+          <div class="barber-pill-row" id="pillRow"></div>
+        </div>
+
+        <div class="field">
+          <label>¿Qué te vas a hacer?</label>
+          <select id="cutSelect" required>
+            <option value="" disabled selected>Selecciona un corte</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Tu nombre</label>
+          <input type="text" id="clientName" placeholder="¿Cómo te llamas?" required>
+        </div>
+
+        <div class="field">
+          <label>Tu WhatsApp</label>
+          <input type="tel" id="clientPhone" placeholder="300 000 0000" required>
+        </div>
+
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="apptDate" required>
+        </div>
+
+        <div class="field">
+          <label>Hora disponible (11AM–9PM)</label>
+          <div class="slots-grid" id="slotsGrid">
+            <div class="slots-hint">Elige un barbero, un corte y una fecha para ver los turnos disponibles.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="ticket-perforation"></div>
+
+      <div class="ticket-summary" id="ticketSummary">
+        Selecciona un barbero y completa tus datos para ver el resumen.
+      </div>
+
+      <div class="ticket-footer">
+        <button type="submit" class="submit-btn" id="submitBtn">Confirmar y enviar por WhatsApp</button>
+        <div class="form-msg" id="formMsg"></div>
+      </div>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <a href="admin.html" aria-label="Acceso" style="display:inline-block;">
+    <img class="brand-logo footer-logo" src="logo.webp" alt="Look Barbershop Store">
+  </a>
+  <p>11:00 AM – 9:00 PM · Todos los días</p>
+</footer>
+
+<script>
+/* ====== CONFIGURACIÓN SUPABASE ====== */
+const SUPABASE_URL = "https://cbvzwwhdfxwlujmninov.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNidnp3d2hkZnh3bHVqbW5pbm92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjkzNzgsImV4cCI6MjA5ODQ0NTM3OH0.MRAu8gLR9ScjftjFmwc6zhuJsUJwBCogZJBUOlSSr4w";
+let sb = null;
+try{
+  if(SUPABASE_URL.startsWith("http")){
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+}catch(e){ console.warn("Supabase no configurado todavía", e); }
+
+/* ====== DATOS DE BARBEROS ====== */
+const BARBERS = [
+  { id:"diego",     name:"Diego",      phone:"573142088095" },
+  { id:"sebastian", name:"Sebastián",  phone:"573114755639" },
+  { id:"felipe",    name:"Felipe",     phone:"573213811802" }
+];
+
+/* ====== CATÁLOGO DE CORTES (con duración en minutos) ====== */
+const CUTS = [
+  { name:"Lo decido en la silla",                   duration:40, icon:true },
+  { name:"Corte caballero",                          price:18000, duration:30, img:"corte1.jpg" },
+  { name:"Corte desde la cero",                      price:20000, duration:40, img:"corte2.jpg" },
+  { name:"Corte con shaver, cejas y mascarilla",     price:25000, duration:60, img:"corte3.jpg" },
+  { name:"Barba",                                    price:10000, duration:20, img:"corte4.jpg" },
+  { name:"Corte todo incluido",                      price:35000, duration:60, img:"corte5.jpg" },
+  { name:"Exfoliación",                              price:12000, duration:30, img:"corte6.jpg" }
+];
+
+// Mapa rápido nombre → duración (en minutos), usado para calcular cuántos bloques de 20 min ocupa cada turno
+const CUT_DURATION = {};
+CUTS.forEach(c => { CUT_DURATION[c.name] = c.duration; });
+function blocksForCut(name){
+  const dur = CUT_DURATION[name] || 20;
+  return Math.max(1, Math.ceil(dur / 20));
+}
+
+function money(n){ return '$' + Number(n||0).toLocaleString('es-CO'); }
+
+let selectedBarber = null;
+let selectedCut = "";
+
+/* Render catálogo */
+const cutsGrid = document.getElementById('cutsGrid');
+CUTS.forEach(cut=>{
+  const div = document.createElement('div');
+  div.className = 'cut-card' + (cut.contain ? ' cut-card-contain' : '') + (cut.icon ? ' cut-card-icon' : '');
+  if(cut.icon){
+    div.innerHTML = `<div class="cut-icon-glyph">✂️</div>
+      <div class="cut-label cut-label-icon">${cut.name}</div>`;
+  } else {
+    div.innerHTML = `<img src="${cut.img}" alt="${cut.name}" loading="lazy">
+      <span class="cut-select-tag">USAR ESTE</span>
+      <div class="cut-label">${cut.name}<span class="cut-price">${money(cut.price)}</span></div>`;
+  }
+  div.addEventListener('click', ()=>{
+    document.querySelectorAll('.cut-card').forEach(c=>c.classList.remove('selected'));
+    div.classList.add('selected');
+    selectedCut = cut.name;
+    document.getElementById('cutSelect').value = cut.name;
+    updateSummary();
+    refreshSlots();
+    document.getElementById('agenda').scrollIntoView({behavior:'smooth'});
+  });
+  cutsGrid.appendChild(div);
+});
+CUTS.forEach(c=>{
+  const opt = document.createElement('option');
+  opt.value = c.name;
+  opt.textContent = c.price ? `${c.name} — ${money(c.price)}` : c.name;
+  document.getElementById('cutSelect').appendChild(opt);
+});
+document.getElementById('cutSelect').addEventListener('change', e=>{
+  selectedCut = e.target.value;
+  document.querySelectorAll('.cut-card').forEach(c=>{
+    const label = c.querySelector('.cut-label');
+    const n = label.childNodes[0].textContent.trim();
+    c.classList.toggle('selected', n === selectedCut);
+  });
+  updateSummary();
+  refreshSlots();
+});
+
+/* Render barberos */
+const barberGrid = document.getElementById('barberGrid');
+const pillRow = document.getElementById('pillRow');
+BARBERS.forEach(b=>{
+  const card = document.createElement('div');
+  card.className = 'barber-card';
+  card.innerHTML = `
+    <div class="barber-avatar">${b.name[0]}</div>
+    <h3>${b.name}</h3>
+    <div class="role">BARBERO · LOOKBARBER</div>
+    <button type="button" class="barber-select-btn" data-id="${b.id}">Agendar con ${b.name}</button>`;
+  card.querySelector('button').addEventListener('click', ()=>selectBarber(b.id, true));
+  barberGrid.appendChild(card);
+
+  const pill = document.createElement('div');
+  pill.className = 'barber-pill';
+  pill.textContent = b.name;
+  pill.dataset.id = b.id;
+  pill.addEventListener('click', ()=>selectBarber(b.id, false));
+  pillRow.appendChild(pill);
+});
+
+function selectBarber(id, scroll){
+  selectedBarber = BARBERS.find(b=>b.id===id);
+  document.querySelectorAll('.barber-select-btn').forEach(btn=>btn.classList.toggle('active', btn.dataset.id===id));
+  document.querySelectorAll('.barber-pill').forEach(p=>p.classList.toggle('active', p.dataset.id===id));
+  updateSummary();
+  refreshSlots();
+  if(scroll) document.getElementById('agenda').scrollIntoView({behavior:'smooth'});
+}
+
+/* Fecha en el ticket */
+function pad(n){return n.toString().padStart(2,'0');}
+function setTicketDate(){
+  const d = new Date();
+  document.getElementById('ticketDate').textContent = `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+}
+setTicketDate();
+
+/* ===== Turnos disponibles — base de 20 minutos, cada corte ocupa los bloques que necesite ===== */
+let selectedTime = "";
+const SLOT_MINUTES = 20;
+const OPEN_HOUR = 11;   // 11:00 AM
+const LAST_SLOT_HOUR = 20; // último bloque de la grilla (8:40 PM)
+const LAST_SLOT_MIN = 40;
+
+function generateSlots(){
+  const slots = [];
+  let h = OPEN_HOUR, m = 0;
+  while(h < LAST_SLOT_HOUR || (h === LAST_SLOT_HOUR && m <= LAST_SLOT_MIN)){
+    slots.push(`${pad(h)}:${pad(m)}`);
+    m += SLOT_MINUTES;
+    if(m >= 60){ m -= 60; h += 1; }
+  }
+  return slots;
+}
+const ALL_SLOTS = generateSlots();
+
+const apptDateInput = document.getElementById('apptDate');
+const slotsGrid = document.getElementById('slotsGrid');
+
+function todayStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+async function refreshSlots(){
+  selectedTime = "";
+  updateSummary();
+  const dateVal = apptDateInput.value;
+
+  if(!selectedBarber || !dateVal || !selectedCut){
+    slotsGrid.innerHTML = '<div class="slots-hint">Elige un barbero, un corte y una fecha para ver los turnos disponibles.</div>';
+    return;
+  }
+
+  slotsGrid.innerHTML = '<div class="slots-loading">Consultando turnos disponibles...</div>';
+
+  const neededBlocks = blocksForCut(selectedCut);
+
+  // occupiedIdx: índices de ALL_SLOTS ocupados por turnos ya agendados (considerando SU propia duración)
+  let occupiedIdx = new Set();
+  let blockedIdx = new Set();
+  let dayFullyBlocked = false;
+
+  if(sb){
+    try{
+      const [{ data: appts, error: e1 }, { data: blocks, error: e2 }] = await Promise.all([
+        sb.from('appointments').select('appt_time,service,status').eq('barber_id', selectedBarber.id).eq('appt_date', dateVal).neq('status', 'cancelado'),
+        sb.from('blocked_times').select('all_day,time_slot').eq('barber_id', selectedBarber.id).eq('block_date', dateVal)
+      ]);
+      if(e1) throw e1;
+      if(e2) throw e2;
+
+      (appts || []).forEach(row => {
+        const startIdx = ALL_SLOTS.indexOf(row.appt_time);
+        if(startIdx === -1) return;
+        const span = blocksForCut(row.service || "");
+        for(let k=0; k<span; k++){
+          if(startIdx+k < ALL_SLOTS.length) occupiedIdx.add(startIdx+k);
+        }
+      });
+      (blocks || []).forEach(row=>{
+        if(row.all_day) dayFullyBlocked = true;
+        else if(row.time_slot){
+          const idx = ALL_SLOTS.indexOf(row.time_slot);
+          if(idx !== -1) blockedIdx.add(idx);
+        }
+      });
+    }catch(err){
+      console.error('No se pudo consultar disponibilidad', err);
+    }
+  }
+
+  if(dayFullyBlocked){
+    slotsGrid.innerHTML = `<div class="slots-hint">${selectedBarber.name} no atiende este día. Elige otra fecha.</div>`;
+    return;
+  }
+
+  const isToday = dateVal === todayStr();
+  const now = new Date();
+  const nowMinutes = now.getHours()*60 + now.getMinutes();
+
+  slotsGrid.innerHTML = '';
+  ALL_SLOTS.forEach((slot, idx)=>{
+    const [hh, mm] = slot.split(':').map(Number);
+    const slotMinutes = hh*60+mm;
+    const isPast = isToday && slotMinutes <= nowMinutes;
+
+    // ¿Alcanzan los bloques necesarios desde aquí sin salirse del horario ni chocar con algo?
+    const fitsInSchedule = (idx + neededBlocks) <= ALL_SLOTS.length;
+    let hasConflict = false;
+    let conflictReason = '';
+    if(fitsInSchedule){
+      for(let k=0; k<neededBlocks; k++){
+        if(occupiedIdx.has(idx+k)){ hasConflict = true; conflictReason = 'Ocupado'; break; }
+        if(blockedIdx.has(idx+k)){ hasConflict = true; conflictReason = 'No disponible'; break; }
+      }
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'slot-btn';
+    btn.textContent = slot;
+
+    if(!fitsInSchedule || hasConflict || isPast){
+      btn.disabled = true;
+      if(!fitsInSchedule) btn.title = 'No alcanza el tiempo antes de cerrar';
+      else if(hasConflict) btn.title = conflictReason;
+    } else {
+      btn.addEventListener('click', ()=>{
+        selectedTime = slot;
+        document.querySelectorAll('.slot-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        updateSummary();
+      });
+    }
+    slotsGrid.appendChild(btn);
+  });
+}
+
+apptDateInput.addEventListener('change', refreshSlots);
+
+/* Resumen dinámico */
+const summaryEl = document.getElementById('ticketSummary');
+function updateSummary(){
+  const name = document.getElementById('clientName').value || '—';
+  const date = document.getElementById('apptDate').value || '—';
+  const time = selectedTime || '—';
+  summaryEl.innerHTML = `
+    <div>BARBERO&nbsp;&nbsp;&nbsp;<b>${selectedBarber ? selectedBarber.name : 'Sin elegir'}</b></div>
+    <div>CLIENTE&nbsp;&nbsp;&nbsp;<b>${name}</b></div>
+    <div>FECHA&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>${date}</b></div>
+    <div>HORA&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>${time}</b></div>
+    <div>CORTE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>${selectedCut || 'Por definir'}</b></div>
+  `;
+}
+document.getElementById('clientName').addEventListener('input', updateSummary);
+updateSummary();
+
+/* Envío del formulario */
+const form = document.getElementById('bookingForm');
+const formMsg = document.getElementById('formMsg');
+const submitBtn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  formMsg.textContent = '';
+  formMsg.className = 'form-msg';
+
+  if(!selectedBarber){
+    formMsg.textContent = 'Elige un barbero antes de continuar.';
+    formMsg.className = 'form-msg error';
+    return;
+  }
+  if(!selectedCut){
+    formMsg.textContent = 'Elige qué te vas a hacer antes de continuar.';
+    formMsg.className = 'form-msg error';
+    return;
+  }
+
+  const clientName = document.getElementById('clientName').value.trim();
+  const clientPhone = document.getElementById('clientPhone').value.trim();
+  const apptDate = document.getElementById('apptDate').value;
+  const apptTime = selectedTime;
+
+  if(!clientName || !clientPhone || !apptDate || !apptTime){
+    formMsg.textContent = 'Completa todos los campos y elige un turno disponible.';
+    formMsg.className = 'form-msg error';
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Verificando disponibilidad...';
+
+  // Guardar en Supabase si está configurado (con verificación anti-choques justo antes de guardar)
+  if(sb){
+    try{
+      const [{ data: existing, error: checkError }, { data: blocks, error: blockError }] = await Promise.all([
+        sb.from('appointments').select('appt_time,service').eq('barber_id', selectedBarber.id).eq('appt_date', apptDate).neq('status', 'cancelado'),
+        sb.from('blocked_times').select('all_day,time_slot').eq('barber_id', selectedBarber.id).eq('block_date', apptDate)
+      ]);
+
+      if(checkError) throw checkError;
+      if(blockError) throw blockError;
+
+      const startIdx = ALL_SLOTS.indexOf(apptTime);
+      const neededBlocks = blocksForCut(selectedCut);
+      const mySpan = new Set();
+      for(let k=0; k<neededBlocks; k++) mySpan.add(startIdx+k);
+
+      let conflict = (blocks || []).some(b => b.all_day) || false;
+      if(!conflict){
+        (existing || []).forEach(row=>{
+          const otherIdx = ALL_SLOTS.indexOf(row.appt_time);
+          if(otherIdx === -1) return;
+          const otherSpan = blocksForCut(row.service || "");
+          for(let k=0; k<otherSpan; k++){
+            if(mySpan.has(otherIdx+k)) conflict = true;
+          }
+        });
+      }
+      if(!conflict){
+        (blocks || []).forEach(b=>{
+          if(!b.time_slot) return;
+          const bi = ALL_SLOTS.indexOf(b.time_slot);
+          if(bi !== -1 && mySpan.has(bi)) conflict = true;
+        });
+      }
+
+      if(conflict){
+        formMsg.textContent = 'Uy, justo acaban de tomar ese turno. Elige otra hora.';
+        formMsg.className = 'form-msg error';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Confirmar y enviar por WhatsApp';
+        refreshSlots();
+        return;
+      }
+
+      submitBtn.textContent = 'Guardando...';
+      await sb.from('appointments').insert({
+        barber_id: selectedBarber.id,
+        barber_name: selectedBarber.name,
+        client_name: clientName,
+        client_phone: clientPhone,
+        service: selectedCut || null,
+        appt_date: apptDate,
+        appt_time: apptTime,
+        status: 'pendiente'
+      });
+    }catch(err){
+      console.error('Error guardando en Supabase', err);
+    }
+  }
+
+  // Armar mensaje de WhatsApp
+  const dateObj = new Date(apptDate + 'T00:00:00');
+  const dateFormatted = dateObj.toLocaleDateString('es-CO', { weekday:'long', day:'numeric', month:'long' });
+  let msg = `Hola ${selectedBarber.name}! Soy ${clientName} y quiero agendar un turno en Lookbarber.\n\n`;
+  msg += `📅 Fecha: ${dateFormatted}\n🕐 Hora: ${apptTime}\n`;
+  if(selectedCut) msg += `✂️ Corte: ${selectedCut}\n`;
+  msg += `📱 Mi WhatsApp: ${clientPhone}`;
+
+  const waUrl = `https://wa.me/${selectedBarber.phone}?text=${encodeURIComponent(msg)}`;
+
+  submitBtn.textContent = 'Abriendo WhatsApp...';
+  formMsg.textContent = '¡Listo! Confirma el envío en WhatsApp.';
+  formMsg.className = 'form-msg ok';
+
+  setTimeout(()=>{
+    window.open(waUrl, '_blank');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Confirmar y enviar por WhatsApp';
+  }, 400);
+});
+</script>
+</body>
+</html>
