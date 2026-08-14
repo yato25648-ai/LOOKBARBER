@@ -99,6 +99,26 @@
     padding:9px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;
   }
   .reminder-btn:hover{filter:brightness(1.1);}
+
+  .walkin-section{margin-bottom:20px;}
+  .walkin-toggle-btn{
+    background:transparent;border:1px dashed var(--blue);color:var(--blue);
+    padding:12px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;width:100%;
+  }
+  .walkin-toggle-btn:hover{background:rgba(62,107,196,.08);}
+  .walkin-panel{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-top:10px;
+  }
+  .walkin-sub{color:var(--muted);font-size:12.5px;margin-bottom:18px;}
+  .walkin-panel select{
+    width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;
+    padding:12px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;
+  }
+  .walkin-panel input[type="text"], .walkin-panel input[type="tel"]{
+    width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;
+    padding:12px 14px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;letter-spacing:normal;text-align:left;
+  }
   .stat-card{
     background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;
   }
@@ -282,6 +302,42 @@
       <div class="reminders-list" id="remindersList"></div>
     </div>
 
+    <div class="walkin-section">
+      <button type="button" class="walkin-toggle-btn" id="walkinToggleBtn">+ Agendar cliente en persona</button>
+      <div class="walkin-panel" id="walkinPanel" style="display:none;">
+        <p class="walkin-sub">Para cuando alguien llega a la barbería sin celular o sin haber agendado. El WhatsApp es opcional.</p>
+
+        <div class="field">
+          <label>Corte</label>
+          <select id="walkinService"></select>
+        </div>
+        <div class="field">
+          <label>Nombre del cliente</label>
+          <input type="text" id="walkinName" placeholder="Nombre">
+        </div>
+        <div class="field">
+          <label>WhatsApp (opcional)</label>
+          <input type="tel" id="walkinPhone" placeholder="Déjalo vacío si no tiene celular">
+        </div>
+        <div class="avail-controls" style="margin-bottom:18px;">
+          <div class="field">
+            <label>Fecha</label>
+            <input type="date" id="walkinDate">
+          </div>
+          <div class="field">
+            <label>Hora</label>
+            <select id="walkinTime"></select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" id="walkinSubmitBtn" style="width:auto;padding:12px 22px;">Agendar turno</button>
+          <button type="button" class="mini-btn secondary" id="walkinCancelBtn" style="padding:12px 18px;">Cancelar</button>
+        </div>
+        <div class="login-msg" id="walkinMsg" style="text-align:left;"></div>
+      </div>
+    </div>
+
     <div class="filter-tabs-row">
       <div class="filter-tabs">
         <div class="filter-tab active" data-f="pendiente">Pendientes</div>
@@ -409,6 +465,7 @@ function enterDashboard(){
   document.getElementById('whoName').textContent = currentBarber.name;
   loadAppointments();
   initAvailability();
+  initWalkin();
 }
 
 document.getElementById('logoutBtn').addEventListener('click', ()=>{
@@ -713,7 +770,7 @@ const CUT_DURATION = {
   "Lo decido en la silla": 40,
   "Corte caballero": 30,
   "Corte desde la cero": 40,
-  "Corte con shaver, cejas y mascarilla": 60,
+  "Corte con shaver y cejas": 60,
   "Barba": 20,
   "Corte todo incluido": 60,
   "Exfoliación": 30
@@ -728,7 +785,7 @@ function blocksForCut(name){
 const CUT_PRICE = {
   "Corte caballero": 18000,
   "Corte desde la cero": 20000,
-  "Corte con shaver, cejas y mascarilla": 25000,
+  "Corte con shaver y cejas": 25000,
   "Barba": 10000,
   "Corte todo incluido": 35000,
   "Exfoliación": 12000
@@ -940,6 +997,192 @@ async function blockRange(){
   }catch(err){
     console.error(err);
     alert('No se pudo bloquear el rango.');
+  }
+}
+
+/* ===================== TURNO EN PERSONA (lo agenda el barbero por el cliente) ===================== */
+// Mismo catálogo/orden que index.html — si cambian los cortes ahí, actualizar también aquí
+const WALKIN_SERVICES = [
+  "Lo decido en la silla",
+  "Corte caballero",
+  "Corte desde la cero",
+  "Corte con shaver y cejas",
+  "Barba",
+  "Corte todo incluido",
+  "Exfoliación"
+];
+
+const walkinToggleBtn = document.getElementById('walkinToggleBtn');
+const walkinPanel = document.getElementById('walkinPanel');
+const walkinService = document.getElementById('walkinService');
+const walkinName = document.getElementById('walkinName');
+const walkinPhone = document.getElementById('walkinPhone');
+const walkinDate = document.getElementById('walkinDate');
+const walkinTime = document.getElementById('walkinTime');
+const walkinMsg = document.getElementById('walkinMsg');
+const walkinSubmitBtn = document.getElementById('walkinSubmitBtn');
+
+function initWalkin(){
+  walkinService.innerHTML = '';
+  WALKIN_SERVICES.forEach(name=>{
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = CUT_PRICE[name] ? `${name} — ${money(CUT_PRICE[name])}` : name;
+    walkinService.appendChild(opt);
+  });
+  walkinDate.value = todayStr();
+  walkinName.value = '';
+  walkinPhone.value = '';
+  walkinMsg.textContent = '';
+  walkinPanel.style.display = 'none';
+  walkinToggleBtn.textContent = '+ Agendar cliente en persona';
+
+  walkinToggleBtn.onclick = ()=>{
+    const opening = walkinPanel.style.display === 'none';
+    walkinPanel.style.display = opening ? 'block' : 'none';
+    walkinToggleBtn.textContent = opening ? 'Cerrar' : '+ Agendar cliente en persona';
+    if(opening) refreshWalkinTimes();
+  };
+  document.getElementById('walkinCancelBtn').onclick = ()=>{
+    walkinPanel.style.display = 'none';
+    walkinToggleBtn.textContent = '+ Agendar cliente en persona';
+    walkinName.value = '';
+    walkinPhone.value = '';
+    walkinMsg.textContent = '';
+  };
+  walkinService.onchange = refreshWalkinTimes;
+  walkinDate.onchange = refreshWalkinTimes;
+  walkinSubmitBtn.onclick = submitWalkin;
+}
+
+// Calcula qué horas siguen libres ese día para ese barbero, teniendo en cuenta
+// bloqueos y la duración del corte elegido (igual que la lógica de agenda pública)
+async function refreshWalkinTimes(){
+  walkinTime.innerHTML = '<option value="">Cargando...</option>';
+  if(!sb || !currentBarber || !walkinDate.value){ walkinTime.innerHTML = '<option value="">—</option>'; return; }
+
+  const dateVal = walkinDate.value;
+  const neededBlocks = blocksForCut(walkinService.value);
+
+  try{
+    const [{ data: blocks, error: e1 }, { data: reserved, error: e2 }] = await Promise.all([
+      sb.from('blocked_times').select('*').eq('barber_id', currentBarber.id).eq('block_date', dateVal),
+      sb.from('appointments').select('appt_time,service').eq('barber_id', currentBarber.id).eq('appt_date', dateVal).neq('status','cancelado')
+    ]);
+    if(e1) throw e1;
+    if(e2) throw e2;
+
+    if((blocks || []).some(b=>b.all_day)){
+      walkinTime.innerHTML = '<option value="">Día bloqueado — elige otra fecha</option>';
+      return;
+    }
+
+    const blockedSet = new Set((blocks||[]).filter(b=>!b.all_day && b.time_slot).map(b=>b.time_slot));
+    const occupied = new Set();
+    (reserved || []).forEach(r=>{
+      const startIdx = ALL_SLOTS.indexOf(r.appt_time);
+      if(startIdx === -1) return;
+      const span = blocksForCut(r.service || "");
+      for(let k=0;k<span;k++){ if(ALL_SLOTS[startIdx+k]) occupied.add(ALL_SLOTS[startIdx+k]); }
+    });
+
+    walkinTime.innerHTML = '';
+    let any = false;
+    ALL_SLOTS.forEach((slot, idx)=>{
+      let free = true;
+      for(let k=0;k<neededBlocks;k++){
+        const s = ALL_SLOTS[idx+k];
+        if(!s || occupied.has(s) || blockedSet.has(s)){ free = false; break; }
+      }
+      if(free){
+        any = true;
+        const opt = document.createElement('option');
+        opt.value = slot;
+        opt.textContent = formatTime12(slot);
+        walkinTime.appendChild(opt);
+      }
+    });
+    if(!any) walkinTime.innerHTML = '<option value="">No hay horarios disponibles ese día</option>';
+  }catch(err){
+    console.error(err);
+    walkinTime.innerHTML = '<option value="">Error cargando horarios</option>';
+  }
+}
+
+async function submitWalkin(){
+  const service = walkinService.value;
+  const name = walkinName.value.trim();
+  const phone = walkinPhone.value.trim();
+  const dateVal = walkinDate.value;
+  const timeVal = walkinTime.value;
+
+  walkinMsg.textContent = '';
+  if(!name){ walkinMsg.textContent = 'Escribe el nombre del cliente.'; return; }
+  if(!dateVal || !timeVal){ walkinMsg.textContent = 'Elige una fecha y una hora disponible.'; return; }
+
+  walkinSubmitBtn.disabled = true;
+  walkinMsg.textContent = 'Guardando...';
+
+  try{
+    // Chequeo de choque justo antes de guardar, por si alguien más tomó ese horario mientras tanto
+    const neededBlocks = blocksForCut(service);
+    const startIdx = ALL_SLOTS.indexOf(timeVal);
+    const mySpan = new Set();
+    for(let k=0;k<neededBlocks;k++) mySpan.add(startIdx+k);
+
+    const [{ data: blocks, error: e1 }, { data: existing, error: e2 }] = await Promise.all([
+      sb.from('blocked_times').select('*').eq('barber_id', currentBarber.id).eq('block_date', dateVal),
+      sb.from('appointments').select('appt_time,service').eq('barber_id', currentBarber.id).eq('appt_date', dateVal).neq('status','cancelado')
+    ]);
+    if(e1) throw e1;
+    if(e2) throw e2;
+
+    let conflict = (blocks || []).some(b=>b.all_day);
+    if(!conflict){
+      (existing||[]).forEach(row=>{
+        const otherIdx = ALL_SLOTS.indexOf(row.appt_time);
+        if(otherIdx === -1) return;
+        const otherSpan = blocksForCut(row.service || "");
+        for(let k=0;k<otherSpan;k++){ if(mySpan.has(otherIdx+k)) conflict = true; }
+      });
+    }
+    if(!conflict){
+      (blocks||[]).forEach(b=>{
+        if(!b.time_slot) return;
+        const bi = ALL_SLOTS.indexOf(b.time_slot);
+        if(bi !== -1 && mySpan.has(bi)) conflict = true;
+      });
+    }
+    if(conflict){
+      walkinMsg.textContent = 'Ese horario ya no está disponible, elige otro.';
+      await refreshWalkinTimes();
+      return;
+    }
+
+    await sb.from('appointments').insert({
+      barber_id: currentBarber.id,
+      barber_name: currentBarber.name,
+      client_name: name,
+      client_phone: phone || null,
+      service: service || null,
+      appt_date: dateVal,
+      appt_time: timeVal,
+      status: 'pendiente'
+    });
+
+    walkinName.value = '';
+    walkinPhone.value = '';
+    walkinMsg.textContent = '';
+    walkinPanel.style.display = 'none';
+    walkinToggleBtn.textContent = '+ Agendar cliente en persona';
+
+    await loadAppointments();
+    await loadAvailability();
+  }catch(err){
+    console.error(err);
+    walkinMsg.textContent = 'No se pudo guardar el turno. Intenta de nuevo.';
+  }finally{
+    walkinSubmitBtn.disabled = false;
   }
 }
 </script>
