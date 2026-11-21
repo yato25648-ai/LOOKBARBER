@@ -540,15 +540,24 @@ async function loadAppointments(){
   }
   listEl.innerHTML = '<div class="loading">Cargando turnos...</div>';
   try{
-    const { data, error } = await sb
-      .from('appointments')
-      .select('*')
-      .eq('barber_id', currentBarber.id)
-      .order('appt_date', { ascending: true })
-      .order('appt_time', { ascending: true });
-
-    if(error) throw error;
-    appointments = data || [];
+    // Supabase entrega máximo 1000 filas por consulta: se piden por páginas
+    // para que nunca se corten las citas más nuevas (pasó con Diego al pasar de 1000).
+    const PAGE = 1000;
+    let all = [];
+    for(let from = 0; ; from += PAGE){
+      const { data, error } = await sb
+        .from('appointments')
+        .select('*')
+        .eq('barber_id', currentBarber.id)
+        .order('appt_date', { ascending: true })
+        .order('appt_time', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if(error) throw error;
+      all = all.concat(data || []);
+      if(!data || data.length < PAGE) break;
+    }
+    appointments = all;
     renderStats();
     renderList();
     renderReminders();

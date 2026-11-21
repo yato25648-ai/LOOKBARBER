@@ -673,8 +673,12 @@
 /* ====== PANTALLA DE CARGA ====== */
 (function(){
   const MIN_VISIBLE_MS = 2650; // deja ver la animación completa de la lata pintando el logo
+  const MAX_WAIT_MS = 6000; // seguro: si algún recurso externo (fuentes, CDN) no carga, no se queda pegado
   const start = Date.now();
+  let done = false;
   function hidePreloader(){
+    if(done) return;
+    done = true;
     const elapsed = Date.now() - start;
     const wait = Math.max(0, MIN_VISIBLE_MS - elapsed);
     setTimeout(()=>{
@@ -689,6 +693,7 @@
   } else {
     window.addEventListener('load', hidePreloader);
   }
+  setTimeout(hidePreloader, MAX_WAIT_MS);
 })();
 
 /* ====== CONFIGURACIÓN SUPABASE ====== */
@@ -892,7 +897,9 @@ function todayStr(){
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 
+let slotsReqId = 0;
 async function refreshSlots(){
+  const myReq = ++slotsReqId; // si el cliente cambia de barbero/fecha rápido, solo vale la última consulta
   selectedTime = "";
   updateSummary();
   const dateVal = apptDateInput.value;
@@ -939,6 +946,7 @@ async function refreshSlots(){
       console.error('No se pudo consultar disponibilidad', err);
     }
   }
+  if(myReq !== slotsReqId) return; // llegó una consulta más nueva: no pintar datos viejos
 
   if(dayFullyBlocked){
     slotsGrid.innerHTML = `<div class="slots-hint">${selectedBarber.name} no atiende este día. Elige otra fecha.</div>`;
@@ -1112,7 +1120,7 @@ form.addEventListener('submit', async (e)=>{
       }
 
       submitBtn.textContent = 'Guardando...';
-      await sb.from('appointments').insert({
+      const { error: insertError } = await sb.from('appointments').insert({
         barber_id: selectedBarber.id,
         barber_name: selectedBarber.name,
         client_name: clientName,
@@ -1122,6 +1130,8 @@ form.addEventListener('submit', async (e)=>{
         appt_time: apptTime,
         status: 'pendiente'
       });
+      // Antes el error se ignoraba y el cliente veía "turno guardado" aunque no se guardara
+      if(insertError) throw insertError;
     }catch(err){
       console.error('Error guardando en Supabase', err);
       fail('No se pudo guardar tu turno por un problema de conexión. Por favor intenta de nuevo.');
